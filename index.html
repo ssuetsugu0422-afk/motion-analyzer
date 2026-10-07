@@ -1,0 +1,688 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Motion Analyzer</title>
+<style>
+:root{
+  --bg:#eef1f5; --panel:#ffffff; --ink:#1c2430; --ink2:#5d6878; --line:#d5dbe3; --soft:#f4f6f9;
+  --accent:#2563eb; --accentSoft:#e3ecff; --x:#2563eb; --v:#15803d; --a:#dc2626; --ax:#7c3aed; --warn:#b45309; --ok:#15803d;
+  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Yu Gothic","Noto Sans JP",Meiryo,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink)}
+body{font-size:15px;line-height:1.55;-webkit-tap-highlight-color:transparent;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+button,select,input{font:inherit;color:inherit}
+header{display:flex;align-items:center;gap:10px 14px;padding:10px 16px;background:#1e3a8a;color:#fff;flex-wrap:wrap}
+header h1{font-size:17px;margin:0;font-weight:700;letter-spacing:.02em}
+.steps{display:flex;gap:4px;flex-wrap:wrap;margin-left:auto}
+.steps button{border:0;font-size:12.5px;padding:3px 10px;border-radius:999px;background:rgba(255,255,255,.14);color:#c7d2fe;white-space:nowrap;cursor:default}
+.steps button.done{color:#fff;cursor:pointer}
+.steps button.on{background:#fff;color:#1e3a8a;font-weight:700}
+.app{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;padding:12px;max-width:1500px;margin:0 auto}
+@media (min-width:1000px){
+  .app{grid-template-columns:minmax(0,1.12fr) minmax(400px,.88fr);align-items:start}
+  .right{position:sticky;top:12px;max-height:calc(100vh - 24px);overflow-y:auto;padding-right:2px}
+}
+.left,.right{display:flex;flex-direction:column;gap:12px;min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.card h2{font-size:15px;margin:0 0 8px}
+.stage{position:relative;background:#0f1115;border-radius:14px;overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:260px}
+#cv{display:none;max-width:100%;max-height:64vh;touch-action:none;cursor:crosshair;user-select:none;-webkit-user-select:none}
+.stage.loaded #cv{display:block}
+.stage.loaded .drop{display:none}
+.drop{margin:16px;border:2px dashed #4b5563;border-radius:12px;color:#cbd5e1;text-align:center;padding:40px 18px;width:calc(100% - 32px)}
+.drop.over{border-color:#93c5fd;background:rgba(59,130,246,.15)}
+.drop p{margin:6px 0}
+.hud{position:absolute;left:8px;bottom:8px;background:rgba(0,0,0,.62);color:#fff;font-size:12.5px;padding:3px 9px;border-radius:8px;pointer-events:none;display:none}
+.stage.loaded .hud{display:block}
+#vid{position:absolute;width:2px;height:2px;opacity:0;pointer-events:none;left:0;top:0}
+.loupe{position:fixed;z-index:50;width:132px;height:132px;border-radius:50%;border:3px solid #3b82f6;overflow:hidden;display:none;pointer-events:none;box-shadow:0 6px 24px rgba(0,0,0,.35);background:#000}
+.loupe canvas{width:100%;height:100%;display:block}
+.panel{display:none}
+.panel.on{display:block}
+.lead{margin:0 0 10px;color:var(--ink2);font-size:14px}
+.row{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin:10px 0}
+.row>label,.row>.lab{font-size:13px;color:var(--ink2);min-width:84px}
+select,input[type=number]{padding:7px 9px;border:1px solid var(--line);border-radius:9px;background:#fff;max-width:100%}
+input[type=number]{width:92px;text-align:right}
+.btn{border:1px solid var(--line);background:#fff;border-radius:10px;padding:9px 14px;cursor:pointer;font-size:14.5px;min-height:42px;touch-action:manipulation}
+.btn:hover:not(:disabled){border-color:var(--accent)}
+.btn:disabled{opacity:.4;cursor:default}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+.btn.warn{color:#b91c1c}
+.btn.small{min-height:34px;padding:5px 10px;font-size:13px}
+.seg{display:inline-flex;flex-wrap:wrap;gap:6px}
+.seg button{border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 13px;cursor:pointer;font-size:14px;min-height:40px;touch-action:manipulation}
+.seg button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+.status{font-size:13.5px;font-weight:700;border-radius:9px;padding:7px 10px;background:#fff7ed;color:var(--warn)}
+.status.ok{background:#ecfdf5;color:var(--ok)}
+.note{font-size:12.5px;color:var(--ink2);margin:6px 0 0}
+.navrow{display:flex;gap:8px;justify-content:space-between;margin-top:12px}
+.framebar{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.framebar input[type=range]{flex:1 1 220px;min-width:160px;accent-color:var(--accent);height:32px}
+.info{font-size:13.5px;font-variant-numeric:tabular-nums;color:var(--ink2)}
+.info b{color:var(--ink)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.results{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.res{background:var(--soft);border-radius:10px;padding:8px 10px}
+.res .k{font-size:12px;color:var(--ink2)}
+.res .v{font-size:18px;font-weight:700;font-variant-numeric:tabular-nums}
+.res .s{font-size:11.5px;color:var(--ink2)}
+.gcard{padding:10px 12px}
+.ghead{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ghead h3{margin:0;font-size:14.5px}
+.ghead .sp{margin-left:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.ghead select{padding:5px 8px;font-size:13px}
+.eq{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;margin:6px 0 2px;min-height:1.4em;overflow-wrap:anywhere}
+.ghost{color:var(--ink2);font-size:13.5px;text-align:center;padding:20px 8px}
+.svgHost{width:100%;touch-action:manipulation}
+.svgHost svg{display:block;width:100%;height:auto;cursor:pointer}
+.toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#111827;color:#fff;padding:8px 16px;border-radius:999px;font-size:14px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:60;max-width:90vw;text-align:center}
+.toast.on{opacity:.94}
+.kbd{font-size:12px;color:var(--ink2)}
+.mobileTip{display:none}
+@media (max-width:600px){
+  .framebar input[type=range]{min-width:70px;flex-basis:70px}
+  .framebar{flex-wrap:nowrap}
+  .mobileTip{display:block}
+  header{padding:8px 12px} header h1{font-size:15.5px}
+  .steps{margin-left:0}
+  .app{padding:8px;gap:8px}
+  .card{padding:10px 11px}
+  #cv{max-height:52vh}
+  .grid2{grid-template-columns:1fr}
+  .kbd{display:none}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Motion Analyzer</h1>
+  <nav class="steps" id="steps" aria-label="手順">
+    <button data-s="0">1 動画</button><button data-s="1">2 長さの基準</button><button data-s="2">3 座標軸</button><button data-s="3">4 記録</button>
+  </nav>
+</header>
+
+<div class="app">
+  <div class="left">
+    <div class="stage" id="stage">
+      <div class="drop" id="drop">
+        <p style="font-size:17px;font-weight:700">動画を選んでください</p>
+        <p>下の「動画を選ぶ」ボタン、またはここにドラッグ＆ドロップ</p>
+      </div>
+      <canvas id="cv"></canvas>
+      <div class="hud" id="hud"></div>
+    </div>
+    <video id="vid" muted playsinline webkit-playsinline preload="auto"></video>
+
+    <div class="card">
+      <!-- 1 動画 -->
+      <section class="panel" id="p0">
+        <h2>1. 動画を読み込む</h2>
+        <p class="lead">物体の動きを、カメラを固定して真横から撮った動画を使います。</p>
+        <input type="file" id="file" accept="video/*" hidden>
+        <button class="btn primary" id="pick">動画を選ぶ</button>
+        <p class="note">PCでは動画をドラッグ＆ドロップでも読み込めます。</p>
+      </section>
+
+      <!-- 2 長さの基準 -->
+      <section class="panel" id="p1">
+        <h2>2. 動画の設定と長さの基準</h2>
+        <div class="grid2">
+          <div class="row" style="margin:4px 0"><label for="fps">フレームレート</label>
+            <select id="fps"></select></div>
+          <div class="row" style="margin:4px 0"><label for="slow">スロー撮影</label>
+            <select id="slow"><option value="1">通常の動画</option><option value="0.5">1/2 スロー</option><option value="0.25">1/4 スロー</option><option value="0.125">1/8 スロー</option></select></div>
+        </div>
+        <p class="note" id="fpsNote"></p>
+        <div class="row"><label for="every">記録の間隔</label>
+          <select id="every"></select><span class="info" id="dtInfo"></span></div>
+        <p class="note">加速度を求めるときは、間隔が 0.03〜0.1 秒くらいになるようにすると安定します。</p>
+        <hr style="border:0;border-top:1px solid var(--line);margin:12px 0">
+        <p class="lead">動画の中で長さが分かっているものの<b>両端を1点ずつ</b>タップします（3回目のタップでやり直し）。</p>
+        <div class="row"><label for="len">その長さ</label><input type="number" id="len" value="1.00" step="0.01" min="0.001" inputmode="decimal"> m</div>
+        <div class="status" id="calibStatus">→ 1点目をタップしてください</div>
+        <div class="navrow"><button class="btn" data-go="0">← 戻る</button><button class="btn primary" id="toAxis" disabled>次へ（座標軸）→</button></div>
+      </section>
+
+      <!-- 3 座標軸 -->
+      <section class="panel" id="p2">
+        <h2>3. 座標軸（原点と正の向き）</h2>
+        <p class="lead">位置 x を測る向きを決めます。鉛直投射・自由落下はどちらも「上向き」（または下向き）にすれば、同じ設定で分析できます。</p>
+        <div class="row"><span class="lab">正の向き</span>
+          <div class="seg" id="dirSeg">
+            <button data-d="up">上向き</button><button data-d="down">下向き</button><button data-d="right">右向き</button><button data-d="left">左向き</button><button data-d="custom">2点で指定（斜面など）</button>
+          </div></div>
+        <div class="status" id="axisStatus">→ 原点（x = 0）にする場所をタップしてください</div>
+        <p class="note" id="axisNote"></p>
+        <div class="navrow"><button class="btn" data-go="1">← 戻る</button><button class="btn primary" id="toTrack" disabled>次へ（記録）→</button></div>
+      </section>
+
+      <!-- 4 記録 -->
+      <section class="panel" id="p3">
+        <h2>4. 物体の位置を記録</h2>
+        <p class="lead">物体の中心をタップ（PCはクリック）すると記録し、自動で次のコマへ進みます。指を当てたまま動かすと拡大鏡で狙いを調整できます。</p>
+        <div class="framebar">
+          <button class="btn small" id="fm10" title="10コマ戻る">−10</button>
+          <button class="btn small" id="fm1" title="1コマ戻る">◀</button>
+          <input type="range" id="seek" min="0" max="0" value="0" aria-label="コマの位置">
+          <button class="btn small" id="fp1" title="1コマ進む">▶</button>
+          <button class="btn small" id="fp10" title="10コマ進む">+10</button>
+        </div>
+        <p class="info" id="trackInfo"></p>
+        <div class="row" style="gap:8px">
+          <button class="btn" id="undo">↶ 直前の点を取り消す</button>
+          <button class="btn" id="delHere" disabled>このコマの点を消す</button>
+          <button class="btn" id="skip">記録せず次へ</button>
+          <button class="btn warn" id="clear">全部消す</button>
+          <button class="btn primary" id="toGraph" style="margin-left:auto">グラフを見る</button>
+        </div>
+        <p class="note mobileTip">スマホを横向きにすると、動画が大きく表示されて狙いやすくなります。</p>
+        <p class="note kbd">キーボード：← → でコマ移動（Shift で10コマ）、Backspace で1点取り消し。</p>
+        <p class="note">記録を始める前に、スライダーで動き出す少し前のコマに合わせてください。同じコマをもう一度タップすると位置を上書きします。</p>
+        <p class="note">動き出す前や止まった後のコマを記録してしまったときは、x-t グラフでその点をタップすると計算から外れます（灰色になり、t = 0 は残った最初の点に合わせ直します）。スライダーでそのコマを表示して「このコマの点を消す」でも削除できます。</p>
+        <div class="navrow"><button class="btn" data-go="2">← 座標軸に戻る</button></div>
+      </section>
+    </div>
+  </div>
+
+  <div class="right" id="right">
+    <div class="card">
+      <h2>解析の設定</h2>
+      <div class="row" style="margin-top:0"><label for="kind">運動の種類</label>
+        <select id="kind">
+          <option value="uniform">等加速度直線運動（自由落下・鉛直投射・斜面など）</option>
+          <option value="shm">単振動（ばね振り子・振り子など）</option>
+          <option value="free">自分で近似の式を選ぶ</option>
+        </select></div>
+      <div class="row"><label for="win">微分の点数</label>
+        <select id="win"><option value="3">3点（中心差分）</option><option value="5" selected>5点（なめらか）</option><option value="7">7点（よりなめらか）</option><option value="9">9点</option></select>
+        <button class="btn small" id="csv">CSVで保存</button></div>
+      <p class="note">速度・加速度の点は、前後の点を2次式で近似して求めます。点数を増やすほどばらつきが減りますが、急な変化はならされます。グラフの点をタップすると、その点を外せます（もう一度で戻す）。x-t で外した点は速度・加速度の計算からも外れ、v-t・a-t で外した点はそのグラフの近似だけから外れます。</p>
+    </div>
+    <div class="card" id="resCard"><h2>結果</h2><div class="results" id="results"><div class="ghost" style="grid-column:1/-1">3点以上記録するとグラフと結果が表示されます。</div></div></div>
+    <div id="graphs"></div>
+  </div>
+</div>
+
+<div class="loupe" id="loupe"><canvas id="lc"></canvas></div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+// ======================= 要素・状態 =======================
+const $=id=>document.getElementById(id);
+const video=$("vid"), cv=$("cv"), ctx=cv.getContext("2d",{willReadFrequently:false});
+const loupe=$("loupe"), lc=$("lc"), lctx=lc.getContext("2d");
+const FPS_LIST=[[24,"24"],[25,"25"],[30000/1001,"29.97"],[30,"30"],[50,"50"],[60000/1001,"59.94"],[60,"60"],[120,"120"],[240,"240"]];
+const S={
+  step:0, loaded:false, fps:30, slow:1, every:1, nFrames:0, frame:0, seeking:false,
+  calib:[], mpp:null, origin:null, dirMode:"up", dirPt:null, u:{x:0,y:-1},
+  pts:new Map(), order:[], ptrDown:false, maxStep:0,
+  kind:"uniform", win:5, ign:{x:new Set(),v:new Set(),a:new Set(),ax:new Set()},
+  fit:{x:"quad",v:"fromx",a:"fromx",ax:"fromx"}, rows:[], fitX:null, scaleK:1
+};
+const PRESET={uniform:{x:"quad",v:"fromx",a:"fromx",ax:"fromx"}, shm:{x:"sin",v:"fromx",a:"fromx",ax:"lin"}, free:{x:"quad",v:"lin",a:"const",ax:"lin"}};
+let toastTimer=null;
+function toast(msg){const t=$("toast");t.textContent=msg;t.classList.add("on");clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove("on"),1800);}
+const fx=(v,d=3)=>{ if(v==null||!isFinite(v)) return "—"; const a=Math.abs(v); if(a<5e-4) return "0"; if(a>=1e5) return v.toExponential(2).replace("-","−"); return (+v.toFixed(d)).toString().replace("-","−"); };
+const sg=v=>{ const t=fx(Math.abs(v)); return (v<0&&t!=="0")?` − ${t}`:` + ${t}`; };
+
+// ======================= 手順の切り替え =======================
+function setStep(s){
+  S.step=s; S.maxStep=Math.max(S.maxStep,s);
+  for(let i=0;i<4;i++) $("p"+i).classList.toggle("on",i===s);
+  document.querySelectorAll("#steps button").forEach(b=>{const k=+b.dataset.s; b.classList.toggle("on",k===s); b.classList.toggle("done",k<=S.maxStep&&k!==s);});
+  cv.style.cursor = (s>=1&&s<=3)?"crosshair":"default";
+  if(s===1) updateCalibUI(); if(s===2) updateAxisUI(); if(s===3) updateTrackInfo();
+  draw();
+}
+$("steps").addEventListener("click",e=>{const b=e.target.closest("button"); if(!b) return; const k=+b.dataset.s; if(k<=S.maxStep && (k===0||S.loaded)) setStep(k);});
+document.querySelectorAll("[data-go]").forEach(b=>b.addEventListener("click",()=>setStep(+b.dataset.go)));
+
+// ======================= 動画の読み込み =======================
+$("pick").onclick=()=>$("file").click();
+$("file").onchange=e=>{ if(e.target.files[0]) loadVideo(e.target.files[0]); e.target.value=""; };
+const drop=$("drop");
+["dragover","drop"].forEach(t=>window.addEventListener(t,e=>e.preventDefault()));
+drop.addEventListener("dragover",()=>drop.classList.add("over"));
+drop.addEventListener("dragleave",()=>drop.classList.remove("over"));
+drop.addEventListener("drop",e=>{drop.classList.remove("over"); const f=e.dataTransfer.files[0]; if(f) loadVideo(f);});
+drop.addEventListener("click",()=>$("file").click());
+
+function fillFps(extra){
+  const sel=$("fps"); const cur=S.fps; sel.innerHTML="";
+  const list=FPS_LIST.slice(); if(extra&&!list.some(([v])=>Math.abs(v-extra)<1e-3)) list.push([extra,extra.toFixed(2)]);
+  list.sort((a,b)=>a[0]-b[0]).forEach(([v,l])=>{const o=document.createElement("option"); o.value=v; o.textContent=l+" fps"; sel.appendChild(o);});
+  let best=null; [...sel.options].forEach(o=>{ if(best===null||Math.abs(+o.value-cur)<Math.abs(+best.value-cur)) best=o; }); sel.value=best.value;
+}
+function fillEvery(){
+  const sel=$("every"), cur=S.every; sel.innerHTML="";
+  for(let k=1;k<=10;k++){const o=document.createElement("option"); o.value=k; o.textContent=k===1?"毎コマ":`${k}コマごと`; sel.appendChild(o);}
+  sel.value=cur; updateDt();
+}
+function updateDt(){ const dt=S.every/S.fps*S.slow; $("dtInfo").textContent=`→ 時間の間隔 Δt = ${dt.toFixed(3)} 秒`; }
+function frameCount(){ return Math.max(1,Math.round(video.duration*S.fps)); }
+function lockTiming(){ const lock=S.pts.size>0; ["fps","slow"].forEach(id=>$(id).disabled=lock);
+  $("fpsNote").textContent = lock ? "記録した点があるため、フレームレートとスロー設定は変更できません（「全部消す」で解除）。" : ($("fpsNote").dataset.msg||""); }
+$("fps").onchange=()=>{ S.fps=+$("fps").value; S.nFrames=frameCount(); $("seek").max=S.nFrames-1; updateDt(); seekFrame(Math.min(S.frame,S.nFrames-1)); };
+$("slow").onchange=()=>{ S.slow=+$("slow").value; updateDt(); updateTrackInfo(); recompute(); };
+$("every").onchange=()=>{ S.every=+$("every").value; updateDt(); };
+
+async function loadVideo(file){
+  if(file.type && !file.type.startsWith("video/")){ toast("動画ファイルを選んでください"); return; }
+  resetAll();
+  video.src=URL.createObjectURL(file);
+  video.load();
+  try{ await new Promise((res,rej)=>{ video.onloadedmetadata=res; video.onerror=()=>rej(new Error("load")); setTimeout(res,8000); }); }
+  catch(e){ toast("この動画は読み込めませんでした（形式を確認してください）"); return; }
+  const vw=video.videoWidth, vh=video.videoHeight;
+  if(!vw||!vh){ toast("この動画は読み込めませんでした"); return; }
+  S.scaleK=Math.min(1,1920/Math.max(vw,vh));
+  cv.width=Math.round(vw*S.scaleK); cv.height=Math.round(vh*S.scaleK);
+  $("stage").classList.add("loaded"); S.loaded=true;
+  $("fpsNote").dataset.msg="フレームレートを確認中…"; $("fpsNote").textContent=$("fpsNote").dataset.msg;
+  const det=await detectFps();
+  if(det){ S.fps=det.fps; fillFps(det.fps); $("fpsNote").dataset.msg=`動画から自動で読み取った値：約 ${det.label} fps（違う場合は選び直してください）`; }
+  else { S.fps=30; fillFps(); $("fpsNote").dataset.msg="フレームレートを自動で読み取れませんでした。撮影したときの値を選んでください（スマホの標準は30fps）。"; }
+  $("fpsNote").textContent=$("fpsNote").dataset.msg;
+  S.nFrames=frameCount(); $("seek").max=S.nFrames-1; $("seek").value=0;
+  fillEvery();
+  await seekFrame(0);
+  setStep(1);
+}
+// 再生しながら mediaTime の間隔を測って fps を推定する（対応ブラウザのみ）
+function detectFps(){
+  return new Promise(resolve=>{
+    if(!("requestVideoFrameCallback" in HTMLVideoElement.prototype)){
+      video.play().then(()=>video.pause()).catch(()=>{}).finally(()=>resolve(null)); return;
+    }
+    const times=[]; let stop=false, finished=false;
+    const cb=(now,md)=>{ times.push(md.mediaTime); if(!stop&&times.length<45) video.requestVideoFrameCallback(cb); };
+    const finish=()=>{ if(finished) return; finished=true; stop=true; video.pause(); video.playbackRate=1;
+      const d=[]; for(let i=1;i<times.length;i++){const x=times[i]-times[i-1]; if(x>1e-5) d.push(x);}
+      if(d.length<6) return resolve(null);
+      d.sort((a,b)=>a-b); const p=d[Math.floor(d.length*0.3)]; const raw=1/p;
+      let best=null; FPS_LIST.forEach(([v,l])=>{ const e=Math.abs(1/v-p)/p; if(!best||e<best.e) best={fps:v,label:l,e}; });
+      if(best.e<0.004) resolve(best); else if(best.e<0.06) resolve({fps:best.fps,label:best.label}); else resolve({fps:raw,label:raw.toFixed(2)});
+    };
+    video.requestVideoFrameCallback(cb);
+    video.playbackRate=0.25; video.currentTime=0;
+    video.play().then(()=>setTimeout(finish,1500)).catch(()=>{ finished=true; video.playbackRate=1; resolve(null); });
+    setTimeout(finish,4000);
+  });
+}
+function resetAll(){
+  S.calib=[]; S.mpp=null; S.origin=null; S.dirPt=null; S.pts=new Map(); S.order=[]; S.maxStep=0; S.frame=0;
+  Object.values(S.ign).forEach(s=>s.clear()); S.rows=[]; S.rowsAll=[]; lockTiming(); renderAll();
+}
+
+// ======================= コマ移動（コマの中央の時刻へ） =======================
+let seekChain=Promise.resolve();
+function seekFrame(f){
+  f=Math.max(0,Math.min(S.nFrames-1,Math.round(f)));
+  seekChain=seekChain.then(()=>new Promise(res=>{
+    S.seeking=true;
+    const target=(f+0.5)/S.fps; let done=false;
+    const fin=()=>{ if(done) return; done=true; clearTimeout(tm); video.removeEventListener("seeked",onS); S.frame=f; S.seeking=false; $("seek").value=f; draw(); updateTrackInfo(); res(); };
+    const onS=()=>{ if("requestVideoFrameCallback" in video){ video.requestVideoFrameCallback(()=>fin()); setTimeout(fin,200);} else fin(); };
+    const tm=setTimeout(fin,2500);
+    video.addEventListener("seeked",onS);
+    if(Math.abs(video.currentTime-target)<1e-6){ onS(); } else video.currentTime=Math.min(target,Math.max(0,video.duration-1e-3));
+  }));
+  return seekChain;
+}
+$("seek").addEventListener("input",()=>{ const v=+$("seek").value; S.frame=v; updateTrackInfo(); clearTimeout(S._st); S._st=setTimeout(()=>seekFrame(v),40); });
+[["fm10",-10],["fm1",-1],["fp1",1],["fp10",10]].forEach(([id,d])=>$(id).onclick=()=>seekFrame(S.frame+d));
+$("skip").onclick=()=>seekFrame(S.frame+S.every);
+$("undo").onclick=undo;
+$("delHere").onclick=()=>{ const f=S.frame; if(!S.pts.has(f)) return; S.pts.delete(f); S.order=S.order.filter(x=>x!==f); ["x","v","a","ax"].forEach(k=>S.ign[k].delete(f)); lockTiming(); recompute(); draw(); updateTrackInfo(); toast(`コマ ${f+1} の点を消しました`); };
+$("clear").onclick=()=>{ const b=$("clear"); if(b.dataset.arm){ S.pts.clear(); S.order=[]; Object.values(S.ign).forEach(s=>s.clear()); delete b.dataset.arm; b.textContent="全部消す"; lockTiming(); recompute(); draw(); updateTrackInfo(); toast("記録を消しました"); }
+  else { b.dataset.arm=1; b.textContent="本当に消す？"; setTimeout(()=>{delete b.dataset.arm; b.textContent="全部消す";},3000);} };
+$("toGraph").onclick=()=>{ if(window.innerWidth<1000) $("right").scrollIntoView({behavior:"smooth"}); };
+function undo(){ if(!S.order.length||S.seeking) return; const f=S.order.pop(); S.pts.delete(f); ["x","v","a","ax"].forEach(k=>S.ign[k].delete(f)); lockTiming(); recompute(); seekFrame(f); }
+document.addEventListener("keydown",e=>{
+  if(S.step!==3||/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)&&e.target.type!=="range") return;
+  if(e.key==="ArrowRight"){e.preventDefault(); seekFrame(S.frame+(e.shiftKey?10:1));}
+  else if(e.key==="ArrowLeft"){e.preventDefault(); seekFrame(S.frame-(e.shiftKey?10:1));}
+  else if(e.key==="Backspace"||(e.key==="z"&&(e.ctrlKey||e.metaKey))){e.preventDefault(); undo();}
+});
+function frameTimeReal(f){ return f/S.fps*S.slow; }
+function updateTrackInfo(){
+  const t=frameTimeReal(S.frame);
+  $("hud").textContent=`コマ ${S.frame+1} / ${S.nFrames}　t = ${t.toFixed(3)} s`;
+  $("delHere").disabled=!S.pts.has(S.frame);
+  if(S.step===3) $("trackInfo").innerHTML=`コマ <b>${S.frame+1}</b> / ${S.nFrames}　動画の時刻 <b>${t.toFixed(3)} s</b>　記録 <b>${S.pts.size}</b> 点${S.pts.has(S.frame)?"（このコマは記録済み）":""}`;
+}
+
+// ======================= 描画 =======================
+function draw(){
+  if(!S.loaded) return;
+  try{ ctx.drawImage(video,0,0,cv.width,cv.height); }catch(e){}
+  const W=cv.width, r=Math.max(4,W*0.006), lw=Math.max(2,W*0.0022), fs=Math.max(13,Math.round(W*0.016));
+  ctx.lineCap="round";
+  // 長さの基準
+  if(S.step===1||S.calib.length===2&&S.step===2){
+    ctx.strokeStyle="#38bdf8"; ctx.fillStyle="#38bdf8"; ctx.lineWidth=lw;
+    if(S.calib.length===2){ ctx.beginPath(); ctx.moveTo(S.calib[0].x,S.calib[0].y); ctx.lineTo(S.calib[1].x,S.calib[1].y); ctx.stroke(); }
+    S.calib.forEach((p,i)=>{ ctx.beginPath(); ctx.arc(p.x,p.y,r*1.3,0,7); ctx.fill(); ctx.fillStyle="#0c4a6e"; ctx.font=`bold ${fs}px sans-serif`; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText(i+1,p.x,p.y); ctx.fillStyle="#38bdf8"; });
+  }
+  // 座標軸
+  if(S.origin&&S.step>=2){
+    const o=S.origin, L=Math.max(W*0.12,60), u=S.u;
+    ctx.strokeStyle="#c084fc"; ctx.fillStyle="#c084fc"; ctx.lineWidth=lw;
+    ctx.beginPath(); ctx.moveTo(o.x-u.x*L*0.35,o.y-u.y*L*0.35); ctx.lineTo(o.x+u.x*L,o.y+u.y*L); ctx.stroke();
+    const hx=o.x+u.x*L, hy=o.y+u.y*L, ang=Math.atan2(u.y,u.x), hs=Math.max(10,W*0.012);
+    ctx.beginPath(); ctx.moveTo(hx,hy); ctx.lineTo(hx-hs*Math.cos(ang-0.45),hy-hs*Math.sin(ang-0.45)); ctx.lineTo(hx-hs*Math.cos(ang+0.45),hy-hs*Math.sin(ang+0.45)); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.arc(o.x,o.y,r,0,7); ctx.fill();
+    ctx.font=`bold ${fs}px sans-serif`; ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillText("+x",hx+u.x*fs*1.3,hy+u.y*fs*1.3); ctx.fillText("O",o.x-u.y*fs*1.1-u.x*fs*0.9,o.y+u.x*fs*1.1-u.y*fs*0.9);
+    if(S.dirMode==="custom"&&S.dirPt){ ctx.beginPath(); ctx.arc(S.dirPt.x,S.dirPt.y,r*0.8,0,7); ctx.fill(); }
+  }
+  // 記録点
+  if(S.step>=2&&S.pts.size){
+    const arr=[...S.pts.values()].sort((a,b)=>a.f-b.f);
+    ctx.lineWidth=Math.max(1,lw*0.5); ctx.strokeStyle="rgba(255,255,255,.9)";
+    arr.forEach(p=>{ const cur=p.f===S.frame; ctx.fillStyle=cur?"#facc15":S.ign.x.has(p.f)?"#9ca3af":"#ef4444"; ctx.beginPath(); ctx.arc(p.px,p.py,cur?r*1.15:r*0.8,0,7); ctx.fill(); ctx.stroke(); });
+  }
+}
+
+// ======================= 拡大鏡とタップ =======================
+const toCanvas=e=>{ const rc=cv.getBoundingClientRect(); return {x:(e.clientX-rc.left)*cv.width/rc.width, y:(e.clientY-rc.top)*cv.height/rc.height, k:cv.width/rc.width}; };
+const interactive=()=>S.loaded&&S.step>=1&&S.step<=3;
+function showLoupe(e){
+  const p=toCanvas(e), size=132, dpr=Math.min(3,window.devicePixelRatio||1);
+  if(lc.width!==size*dpr){ lc.width=size*dpr; lc.height=size*dpr; }
+  const off=e.pointerType==="mouse"?18:42;
+  let lx=e.clientX-size-off, ly=e.clientY-size-off;
+  if(lx<4) lx=Math.min(window.innerWidth-size-4,e.clientX+off); if(ly<4) ly=Math.min(window.innerHeight-size-4,e.clientY+off);
+  loupe.style.left=lx+"px"; loupe.style.top=ly+"px"; loupe.style.display="block";
+  const src=size/4*p.k; const D=lc.width;
+  lctx.imageSmoothingEnabled=false; lctx.fillStyle="#000"; lctx.fillRect(0,0,D,D);
+  lctx.drawImage(cv,p.x-src/2,p.y-src/2,src,src,0,0,D,D);
+  lctx.strokeStyle="rgba(250,204,21,.95)"; lctx.lineWidth=1.5*dpr;
+  lctx.beginPath(); lctx.moveTo(D/2,D*0.18); lctx.lineTo(D/2,D*0.42); lctx.moveTo(D/2,D*0.58); lctx.lineTo(D/2,D*0.82);
+  lctx.moveTo(D*0.18,D/2); lctx.lineTo(D*0.42,D/2); lctx.moveTo(D*0.58,D/2); lctx.lineTo(D*0.82,D/2); lctx.stroke();
+  lctx.beginPath(); lctx.arc(D/2,D/2,2*dpr,0,7); lctx.fillStyle="#facc15"; lctx.fill();
+}
+const hideLoupe=()=>{loupe.style.display="none";};
+cv.addEventListener("pointerdown",e=>{ if(!interactive()) return; e.preventDefault(); try{cv.setPointerCapture(e.pointerId);}catch(_){} S.ptrDown=true; showLoupe(e); });
+cv.addEventListener("pointermove",e=>{ if(!interactive()) return; if(S.ptrDown||e.pointerType==="mouse") showLoupe(e); });
+cv.addEventListener("pointerup",e=>{ if(!S.ptrDown) return; S.ptrDown=false; if(e.pointerType!=="mouse") hideLoupe(); onTap(toCanvas(e)); });
+cv.addEventListener("pointercancel",()=>{S.ptrDown=false; hideLoupe();});
+cv.addEventListener("pointerleave",e=>{ if(!S.ptrDown) hideLoupe(); });
+
+function onTap(p){
+  if(S.step===1){ if(S.calib.length>=2) S.calib=[]; S.calib.push({x:p.x,y:p.y}); updateCalibUI(); draw(); }
+  else if(S.step===2){
+    if(S.dirMode==="custom"){ if(!S.origin||S.dirPt){ S.origin={x:p.x,y:p.y}; S.dirPt=null; } else { S.dirPt={x:p.x,y:p.y}; } }
+    else S.origin={x:p.x,y:p.y};
+    computeAxis(); updateAxisUI(); draw();
+  }
+  else if(S.step===3){
+    if(S.seeking) return;
+    const f=S.frame; S.pts.set(f,{f,px:p.x,py:p.y}); S.order=S.order.filter(x=>x!==f); S.order.push(f);
+    lockTiming(); recompute(); draw(); updateTrackInfo();
+    if(f+S.every<=S.nFrames-1) seekFrame(f+S.every); else toast("最後のコマです");
+  }
+}
+
+// ======================= 長さの基準・座標軸 =======================
+function updateCalibUI(){
+  const st=$("calibStatus"), n=S.calib.length;
+  if(n===2){ const len=parseFloat($("len").value); const d=Math.hypot(S.calib[1].x-S.calib[0].x,S.calib[1].y-S.calib[0].y);
+    if(len>0&&d>0){ S.mpp=len/d; st.className="status ok"; st.textContent=`✓ 2点の間 ${d.toFixed(0)} px ＝ ${len} m（1 px ＝ ${(S.mpp*1000).toFixed(2)} mm）`; $("toAxis").disabled=false; }
+    else { st.className="status"; st.textContent="長さを正しく入力してください"; $("toAxis").disabled=true; } }
+  else { st.className="status"; st.textContent=n===0?"→ 1点目をタップしてください":"→ 2点目をタップしてください"; $("toAxis").disabled=true; }
+  if(S.pts.size) recompute();
+}
+$("len").addEventListener("input",updateCalibUI);
+$("toAxis").onclick=()=>setStep(2);
+$("dirSeg").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return; S.dirMode=b.dataset.d; if(S.dirMode!=="custom") S.dirPt=null; computeAxis(); updateAxisUI(); draw(); });
+function computeAxis(){
+  const m={up:{x:0,y:-1},down:{x:0,y:1},right:{x:1,y:0},left:{x:-1,y:0}};
+  if(S.dirMode==="custom"){ if(S.origin&&S.dirPt){ const dx=S.dirPt.x-S.origin.x, dy=S.dirPt.y-S.origin.y, L=Math.hypot(dx,dy); S.u=L>0?{x:dx/L,y:dy/L}:{x:1,y:0}; } }
+  else S.u=m[S.dirMode];
+  if(S.pts.size) recompute();
+}
+function axisAngle(){ return Math.atan2(-S.u.y,S.u.x)*180/Math.PI; } // 水平右向きから反時計回り
+function updateAxisUI(){
+  document.querySelectorAll("#dirSeg button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.d===S.dirMode));
+  const st=$("axisStatus"); let ok=false;
+  if(!S.origin){ st.className="status"; st.textContent="→ 原点（x = 0）にする場所をタップしてください"; }
+  else if(S.dirMode==="custom"&&!S.dirPt){ st.className="status"; st.textContent="→ 正の向きの先にある点（斜面の下の方など）をタップしてください"; }
+  else { ok=true; st.className="status ok"; st.textContent="✓ 座標軸を設定しました（原点をタップし直すと変更できます）"; }
+  $("toTrack").disabled=!ok;
+  let note="";
+  if(S.dirMode==="custom"&&S.dirPt){ const th=axisAngle(); const inc=Math.abs(th)>90?180-Math.abs(th):Math.abs(th);
+    note=`軸の向き：水平から ${inc.toFixed(1)}° 傾いています（カメラが水平な場合）。斜面の運動なら、軸を斜面に沿わせてください。`; }
+  else if(S.dirMode==="up"||S.dirMode==="down") note="鉛直の運動：上向きを正にすると、投げ上げでも落下でも重力加速度は a ≒ −9.8 m/s² になります。";
+  $("axisNote").textContent=note;
+}
+$("toTrack").onclick=()=>{ setStep(3); };
+
+// ======================= 計算 =======================
+function solve(A,b){ // ガウスの消去法（部分ピボット）
+  const n=b.length, M=A.map((r,i)=>[...r,b[i]]);
+  for(let c=0;c<n;c++){ let p=c; for(let r=c+1;r<n;r++) if(Math.abs(M[r][c])>Math.abs(M[p][c])) p=r;
+    if(Math.abs(M[p][c])<1e-14) return null; [M[c],M[p]]=[M[p],M[c]];
+    for(let r=0;r<n;r++){ if(r===c) continue; const k=M[r][c]/M[c][c]; for(let j=c;j<=n;j++) M[r][j]-=k*M[c][j]; } }
+  return M.map((r,i)=>r[n]/r[i]);
+}
+function lsq(ts,ys,funcs){ const n=funcs.length, A=Array.from({length:n},()=>Array(n).fill(0)), b=Array(n).fill(0);
+  for(let i=0;i<ts.length;i++){ const f=funcs.map(g=>g(ts[i])); for(let j=0;j<n;j++){ b[j]+=f[j]*ys[i]; for(let k=0;k<n;k++) A[j][k]+=f[j]*f[k]; } }
+  return solve(A,b); }
+function r2(ts,ys,f){ if(ys.length<2) return null; const m=ys.reduce((s,y)=>s+y,0)/ys.length; let st=0,sr=0; ys.forEach((y,i)=>{st+=(y-m)**2; sr+=(y-f(ts[i]))**2;}); return st<1e-18?null:1-sr/st; }
+function sinFit(ts,ys){
+  const n=ts.length; if(n<6) return null; const span=ts[n-1]-ts[0]; if(span<=0) return null;
+  let dmin=Infinity; for(let i=1;i<n;i++){ const d=ts[i]-ts[i-1]; if(d>1e-9&&d<dmin) dmin=d; }
+  const wmin=Math.PI/span*0.6, wmax=Math.PI/dmin*0.9; if(!(wmax>wmin)) return null;
+  const ev=w=>{ const c=lsq(ts,ys,[t=>Math.sin(w*t),t=>Math.cos(w*t),()=>1]); if(!c) return {sse:Infinity}; let s=0; for(let i=0;i<n;i++){ const y=c[0]*Math.sin(w*ts[i])+c[1]*Math.cos(w*ts[i])+c[2]; s+=(ys[i]-y)**2; } return {sse:s,c,w}; };
+  const N=500, q=Math.pow(wmax/wmin,1/(N-1)); let best={sse:Infinity}, bk=0;
+  for(let k=0;k<N;k++){ const r=ev(wmin*q**k); if(r.sse<best.sse){best=r;bk=k;} }
+  let lo=wmin*q**Math.max(0,bk-1), hi=wmin*q**Math.min(N-1,bk+1); const g=(Math.sqrt(5)-1)/2;
+  let a=hi-g*(hi-lo), b=lo+g*(hi-lo), fa=ev(a), fb=ev(b);
+  for(let i=0;i<50;i++){ if(fa.sse<fb.sse){ hi=b; b=a; fb=fa; a=hi-g*(hi-lo); fa=ev(a);} else { lo=a; a=b; fa=fb; b=lo+g*(hi-lo); fb=ev(b);} }
+  [fa,fb].forEach(r=>{ if(r.sse<best.sse) best=r; });
+  if(!best.c) return null; const [s,c,C]=best.c; return {A:Math.hypot(s,c), w:best.w, phi:Math.atan2(c,s), C};
+}
+// 局所2次近似による微分（win点、中央の点の v と a）
+function derivs(rows,win){
+  const h=(win-1)/2;
+  rows.forEach(r=>{r.v=null;r.a=null;});
+  for(let i=h;i<rows.length-h;i++){
+    const t0=rows[i].t, ts=[], ys=[]; for(let j=i-h;j<=i+h;j++){ ts.push(rows[j].t-t0); ys.push(rows[j].x); }
+    const c=lsq(ts,ys,[()=>1,t=>t,t=>t*t]); if(!c) continue; rows[i].v=c[1]; rows[i].a=2*c[2];
+  }
+}
+function recompute(){
+  const arr=[...S.pts.values()].sort((a,b)=>a.f-b.f);
+  if(!arr.length||!S.mpp||!S.origin){ S.rows=[]; S.rowsAll=[]; renderAll(); return; }
+  // x-t グラフで外した点（動き出す前・止まった後など）は「使わない点」として、
+  // 速度・加速度の計算、t = 0 の基準、ほかのグラフからも除く
+  const all=arr.map(p=>({f:p.f, x:((p.px-S.origin.x)*S.u.x+(p.py-S.origin.y)*S.u.y)*S.mpp, v:null, a:null, off:S.ign.x.has(p.f)}));
+  const act=all.filter(r=>!r.off), f0=(act[0]||all[0]).f;
+  all.forEach(r=>r.t=(r.f-f0)/S.fps*S.slow);
+  S.rowsAll=all; S.rows=act;
+  derivs(S.rows,S.win);
+  renderAll();
+}
+$("win").onchange=()=>{ S.win=+$("win").value; recompute(); };
+
+// ---- 近似 ----
+const FITNAMES={const:"0次（一定）",lin:"1次",lin0:"1次（原点を通る）",quad:"2次",sin:"単振動（正弦）",fromx:"x-t の近似から計算",none:"近似なし"};
+const FITOPTS={x:["quad","lin","sin","const","none"], v:["fromx","lin","const","quad","sin","none"], a:["fromx","const","lin","sin","none"], ax:["fromx","lin","lin0","none"]};
+function fitData(type,ts,ys,key){
+  const res=(f,eq,extra)=>({f,eq,r2:r2(ts,ys,f),...(extra||{})});
+  const Y=key==="ax"?"a":key, T=key==="ax"?"x":"t";
+  if(type==="none"||ts.length<2) return null;
+  if(type==="const"){ const c=ys.reduce((s,y)=>s+y,0)/ys.length; return res(()=>c,`${Y} = ${fx(c)}（平均）`,{c,flat:true}); }
+  if(type==="lin"){ const c=lsq(ts,ys,[t=>t,()=>1]); if(!c) return null; return res(t=>c[0]*t+c[1],`${Y} = ${fx(c[0])} ${T}${sg(c[1])}`,{A:c[0],B:c[1]}); }
+  if(type==="lin0"){ const c=lsq(ts,ys,[t=>t]); if(!c) return null; return res(t=>c[0]*t,`${Y} = ${fx(c[0])} ${T}`,{A:c[0],B:0}); }
+  if(type==="quad"){ if(ts.length<3) return null; const c=lsq(ts,ys,[t=>t*t,t=>t,()=>1]); if(!c) return null; return res(t=>c[0]*t*t+c[1]*t+c[2],`${Y} = ${fx(c[0])} ${T}²${sg(c[1])} ${T}${sg(c[2])}`,{A:c[0],B:c[1],C:c[2]}); }
+  if(type==="sin"){ const p=sinFit(ts,ys); if(!p) return null; const f=t=>p.A*Math.sin(p.w*t+p.phi)+p.C;
+    return res(f,`${Y} = ${fx(p.A)} sin(${fx(p.w)}${T}${sg(p.phi)})${sg(p.C)}`,{sinp:p}); }
+  return null;
+}
+function fromX(key){ // x-t の近似を微分した式
+  const F=S.fitX; if(!F) return null;
+  if(F.type==="quad"){ const {A,B,C}=F; if(key==="v") return {f:t=>2*A*t+B, eq:`v = ${fx(2*A)} t${sg(B)}（x-t の近似を微分）`};
+    if(key==="a") return {f:()=>2*A, flat:true, eq:`a = 2A = ${fx(2*A)}（x-t の近似から）`};
+    if(key==="ax") return {f:()=>2*A, flat:true, eq:`a = ${fx(2*A)}（一定）`}; }
+  if(F.type==="lin"){ if(key==="v") return {f:()=>F.A, flat:true, eq:`v = ${fx(F.A)}（x-t の傾き）`}; if(key==="a"||key==="ax") return {f:()=>0, flat:true, eq:"a = 0（等速）"}; }
+  if(F.type==="const"){ if(key==="v") return {f:()=>0,flat:true,eq:"v = 0"}; return {f:()=>0,flat:true,eq:"a = 0"}; }
+  if(F.type==="sin"){ const {A,w,phi,C}=F.sinp;
+    if(key==="v") return {f:t=>A*w*Math.cos(w*t+phi), eq:`v = ${fx(A*w)} cos(${fx(w)}t${sg(phi)})（x-t を微分）`};
+    if(key==="a") return {f:t=>-A*w*w*Math.sin(w*t+phi), eq:`a = −${fx(A*w*w)} sin(${fx(w)}t${sg(phi)})（x-t を微分）`};
+    if(key==="ax") return {f:x=>-w*w*(x-C), eq:`a = −ω²(x − ${fx(C)})，ω² = ${fx(w*w)}（x-t から）`}; }
+  return null;
+}
+
+// ======================= グラフ =======================
+const GDEF=[
+  {k:"x",title:"位置 x-t",yl:"x [m]",xl:"t [s]",color:"var(--x)",hex:"#2563eb"},
+  {k:"v",title:"速度 v-t",yl:"v [m/s]",xl:"t [s]",color:"var(--v)",hex:"#15803d"},
+  {k:"a",title:"加速度 a-t",yl:"a [m/s²]",xl:"t [s]",color:"var(--a)",hex:"#dc2626"},
+  {k:"ax",title:"加速度と位置 a-x",yl:"a [m/s²]",xl:"x [m]",color:"var(--ax)",hex:"#7c3aed"}
+];
+function buildGraphs(){
+  const host=$("graphs"); host.innerHTML="";
+  GDEF.forEach(g=>{
+    const c=document.createElement("div"); c.className="card gcard"; c.id="g-"+g.k;
+    c.innerHTML=`<div class="ghead"><h3 style="color:${g.color}">${g.title}</h3><div class="sp">
+      <select id="fit-${g.k}" aria-label="${g.title}の近似">${FITOPTS[g.k].map(o=>`<option value="${o}">${FITNAMES[o]}</option>`).join("")}</select>
+      <button class="btn small" id="png-${g.k}">画像保存</button></div></div>
+      <div class="eq" id="eq-${g.k}"></div><div class="svgHost" id="sv-${g.k}"></div>`;
+    host.appendChild(c);
+    $("fit-"+g.k).value=S.fit[g.k];
+    $("fit-"+g.k).onchange=e=>{ S.fit[g.k]=e.target.value; renderAll(); };
+    $("png-"+g.k).onclick=()=>savePng(g.k);
+    $("sv-"+g.k).addEventListener("click",e=>onGraphClick(e,g.k));
+  });
+}
+$("kind").onchange=()=>{ S.kind=$("kind").value; Object.assign(S.fit,PRESET[S.kind]); GDEF.forEach(g=>$("fit-"+g.k).value=S.fit[g.k]); renderAll(); };
+function seriesOf(k){
+  const R=S.rows;
+  if(k==="x") return (S.rowsAll||R).map(r=>({X:r.t,Y:r.x,f:r.f}));
+  if(k==="v") return R.filter(r=>r.v!=null).map(r=>({X:r.t,Y:r.v,f:r.f}));
+  if(k==="a") return R.filter(r=>r.a!=null).map(r=>({X:r.t,Y:r.a,f:r.f}));
+  return R.filter(r=>r.a!=null).map(r=>({X:r.x,Y:r.a,f:r.f}));
+}
+function niceTicks(lo,hi,n){
+  if(!(hi>lo)){ const d=Math.abs(lo)||1; lo-=d*0.5; hi+=d*0.5; }
+  const raw=(hi-lo)/n, mag=10**Math.floor(Math.log10(raw)), e=raw/mag;
+  const step=(e>=7?10:e>=3.5?5:e>=1.5?2:1)*mag; const a=Math.floor(lo/step+1e-9)*step, b=Math.ceil(hi/step-1e-9)*step;
+  const out=[]; for(let v=a; v<=b+step*1e-6; v+=step) out.push(Math.abs(v)<step*1e-9?0:v);
+  const dec=Math.max(0,-Math.floor(Math.log10(step)+1e-9));
+  return {lo:a,hi:b,ticks:out,dec};
+}
+const FITS={};
+function computeFits(){
+  // x を先に（v,a は x-t の近似を使うことがある）
+  ["x","v","a","ax"].forEach(k=>{
+    const s=seriesOf(k).filter(p=>!S.ign[k].has(p.f)); const ts=s.map(p=>p.X), ys=s.map(p=>p.Y);
+    let F=null;
+    if(S.fit[k]==="fromx"){ const d=fromX(k); if(d){ F={...d, r2:r2(ts,ys,d.f)}; } else F={f:null,eq:"x-t の近似を「2次」「1次」「単振動」のどれかにしてください"}; }
+    else { F=fitData(S.fit[k],ts,ys,k); if(F) F.type=S.fit[k]; }
+    if(k==="x") S.fitX=F&&F.f?F:null;
+    FITS[k]=F;
+  });
+}
+function graphSVG(k,W,H,forExport){
+  const g=GDEF.find(d=>d.k===k), s=seriesOf(k), F=FITS[k];
+  const top=forExport?62:10, L=58, R=14, B=40, pw=W-L-R, ph=H-top-B;
+  const xs=s.map(p=>p.X), act=s.filter(p=>!S.ign[k].has(p.f)), ysAct=act.map(p=>p.Y);
+  const RA=S.rowsAll&&S.rowsAll.length?S.rowsAll:S.rows; let xlo=k==="ax"?Math.min(...xs):Math.min(0,RA[0].t), xhi=k==="ax"?Math.max(...xs):RA[RA.length-1].t; if(k==="ax"){ const pad=(xhi-xlo)*0.08||0.05; xlo-=pad; xhi+=pad; }
+  let ylo=Math.min(0,...(ysAct.length?ysAct:s.map(p=>p.Y))), yhi=Math.max(0,...(ysAct.length?ysAct:s.map(p=>p.Y)));
+  const yp=(yhi-ylo)*0.08||0.1; ylo-=yp; yhi+=yp;   const tx=niceTicks(xlo,xhi,6), ty=niceTicks(ylo,yhi,5);
+  const X=v=>L+(v-tx.lo)/(tx.hi-tx.lo)*pw, Y=v=>top+(1-(v-ty.lo)/(ty.hi-ty.lo))*ph;
+  let o=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="-apple-system,'Hiragino Sans','Yu Gothic',sans-serif">`;
+  o+=`<rect x="0" y="0" width="${W}" height="${H}" fill="#fff"/>`;
+  if(forExport){ o+=`<text x="${L}" y="26" font-size="18" font-weight="700" fill="${g.hex}">${g.title}</text><text x="${L}" y="50" font-size="14" font-family="Menlo,Consolas,monospace" fill="#1c2430">${esc(eqText(k))}</text>`; }
+  o+=`<defs><clipPath id="cp-${k}${forExport?"e":""}"><rect x="${L}" y="${top}" width="${pw}" height="${ph}"/></clipPath></defs>`;
+  ty.ticks.forEach(v=>{ const y=Y(v); o+=`<line x1="${L}" y1="${y}" x2="${L+pw}" y2="${y}" stroke="${v===0?"#9aa4b2":"#e8ecf1"}" stroke-width="${v===0?1.2:1}"/><text x="${L-6}" y="${y+4}" font-size="11.5" text-anchor="end" fill="#5d6878">${v.toFixed(ty.dec)}</text>`; });
+  tx.ticks.forEach(v=>{ const x=X(v); o+=`<line x1="${x}" y1="${top}" x2="${x}" y2="${top+ph}" stroke="${v===0&&k==="ax"?"#9aa4b2":"#eef1f5"}"/><text x="${x}" y="${top+ph+16}" font-size="11.5" text-anchor="middle" fill="#5d6878">${v.toFixed(tx.dec)}</text>`; });
+  o+=`<rect x="${L}" y="${top}" width="${pw}" height="${ph}" fill="none" stroke="#9aa4b2"/>`;
+  o+=`<text x="${L+pw}" y="${H-6}" font-size="12" text-anchor="end" fill="#5d6878">${g.xl}</text>`;
+  o+=`<text x="14" y="${top+ph/2}" font-size="12" text-anchor="middle" fill="#5d6878" transform="rotate(-90 14 ${top+ph/2})">${g.yl}</text>`;
+  if(F&&F.f){ const N=240; let d=""; for(let i=0;i<=N;i++){ const xv=tx.lo+(tx.hi-tx.lo)*i/N, yv=F.f(xv); if(!isFinite(yv)) continue; d+=(d?"L":"M")+X(xv).toFixed(1)+" "+Y(yv).toFixed(1); }
+    o+=`<path d="${d}" fill="none" stroke="${g.hex}" stroke-width="2.2" opacity=".55" clip-path="url(#cp-${k}${forExport?"e":""})"/>`; }
+  const pts=[];
+  s.forEach(p=>{ const cx=X(p.X), cy=Y(p.Y), ig=S.ign[k].has(p.f); pts.push({cx,cy,f:p.f});
+    o+=ig?`<circle cx="${cx}" cy="${cy}" r="3.6" fill="#fff" stroke="#9aa4b2" stroke-width="1.4"/>`:`<circle cx="${cx}" cy="${cy}" r="3.6" fill="${g.hex}"/>`; });
+  o+="</svg>";
+  return {svg:o,pts,W,H};
+}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function eqText(k){ const F=FITS[k]; if(!F) return S.fit[k]==="none"?"":"（近似できません：点が足りない可能性があります）"; return F.eq+(!F.flat&&F.r2!=null&&isFinite(F.r2)?`　R² = ${F.r2.toFixed(4)}`:""); }
+const GSTATE={};
+function renderAll(){
+  if(!$("g-x")) buildGraphs();
+  const enough=S.rows.length>=3;
+  $("g-ax").style.display=(S.kind==="shm"||S.fit.ax!=="fromx"&&S.kind==="free")?"":"none";
+  if(!enough){ GDEF.forEach(g=>{ $("sv-"+g.k).innerHTML=`<div class="ghost">3点以上記録するとグラフが表示されます。</div>`; $("eq-"+g.k).textContent=""; });
+    $("results").innerHTML=`<div class="ghost" style="grid-column:1/-1">3点以上記録するとグラフと結果が表示されます。</div>`; return; }
+  computeFits();
+  GDEF.forEach(g=>{
+    const host=$("sv-"+g.k); if($("g-"+g.k).style.display==="none") return;
+    if(!seriesOf(g.k).length){ host.innerHTML=`<div class="ghost">速度・加速度は ${S.win} 点以上記録すると表示されます。</div>`; $("eq-"+g.k).textContent=""; return; }
+    const W=Math.max(300,Math.round(host.clientWidth||520)), H=Math.round(Math.max(200,Math.min(300,W*0.55)));
+    const r=graphSVG(g.k,W,H,false); host.innerHTML=r.svg; GSTATE[g.k]=r; $("eq-"+g.k).textContent=eqText(g.k);
+  });
+  renderResults();
+}
+function onGraphClick(e,k){
+  const st=GSTATE[k]; if(!st) return; const svg=$("sv-"+k).querySelector("svg"); if(!svg) return;
+  const rc=svg.getBoundingClientRect(), sx=(e.clientX-rc.left)*st.W/rc.width, sy=(e.clientY-rc.top)*st.H/rc.height;
+  let best=null, bd=Infinity; st.pts.forEach(p=>{ const d=Math.hypot(p.cx-sx,p.cy-sy); if(d<bd){bd=d;best=p;} });
+  const tol=18*st.W/rc.width; if(best&&bd<tol){ S.ign[k].has(best.f)?S.ign[k].delete(best.f):S.ign[k].add(best.f); if(k==="x"){ recompute(); draw(); } else renderAll(); }
+}
+let roT=null; new ResizeObserver(()=>{clearTimeout(roT); roT=setTimeout(()=>{ if(S.rows.length>=3) renderAll(); },120);}).observe($("graphs"));
+
+function renderResults(){
+  const out=[], add=(k,v,s)=>out.push(`<div class="res"><div class="k">${k}</div><div class="v">${v}</div>${s?`<div class="s">${s}</div>`:""}</div>`);
+  const F=S.fitX, vs=seriesOf("v").filter(p=>!S.ign.v.has(p.f)), as=seriesOf("a").filter(p=>!S.ign.a.has(p.f));
+  if(S.kind!=="shm"){
+    if(F&&F.type==="quad"){ add("加速度 a（x-t の 2A）",`${fx(2*F.A)} m/s²`,F.r2!=null?`x-t の近似 R² = ${F.r2.toFixed(4)}`:""); add("初速度 v₀（t = 0）",`${fx(F.B)} m/s`); }
+    else if(F&&F.type==="lin") add("速度（x-t の傾き）",`${fx(F.A)} m/s`,"等速直線運動として近似");
+    if(vs.length>=2){ const c=lsq(vs.map(p=>p.X),vs.map(p=>p.Y),[t=>t,()=>1]); if(c) add("v-t の傾き（確認用）",`${fx(c[0])} m/s²`,"速度の点を直線で近似"); }
+    if(as.length) add("a-t の点の平均",`${fx(as.reduce((s,p)=>s+p.Y,0)/as.length)} m/s²`,`${as.length}点`);
+    if(S.dirMode==="custom"){ const th=Math.abs(axisAngle()), inc=th>90?180-th:th; add("軸の傾き θ",`${inc.toFixed(1)}°`,`参考：g sinθ = ${(9.8*Math.sin(inc*Math.PI/180)).toFixed(2)} m/s²`); }
+    else if(S.dirMode==="up"||S.dirMode==="down") add("参考：重力加速度",`${S.dirMode==="up"?"−":"+"}9.8 m/s²`,`${S.dirMode==="up"?"上":"下"}向きを正としたとき`);
+  } else {
+    if(F&&F.type==="sin"){ const {A,w,C}=F.sinp; add("周期 T",`${fx(2*Math.PI/w)} s`,`ω = ${fx(w)} rad/s`); add("振幅 A",`${fx(A)} m`,`振動の中心 x = ${fx(C)} m`); add("ω²（x-t から）",`${fx(w*w)} s⁻²`); }
+    else add("周期 T","—","x-t の近似を「単振動（正弦）」にしてください");
+    const ax=seriesOf("ax").filter(p=>!S.ign.ax.has(p.f));
+    if(ax.length>=3){ const c=lsq(ax.map(p=>p.X),ax.map(p=>p.Y),[x=>x,()=>1]); if(c&&c[0]<0){ add("ω²（a-x の傾きから）",`${fx(-c[0])} s⁻²`,`T = ${fx(2*Math.PI/Math.sqrt(-c[0]))} s`); } }
+  }
+  const nAll=(S.rowsAll||S.rows).length;
+  add("計算に使った点",`${S.rows.length} 点`+(nAll>S.rows.length?` / 記録 ${nAll} 点`:""),`Δt = ${(S.every/S.fps*S.slow).toFixed(3)} s ごと（${fx(S.fps)} fps）`);
+  $("results").innerHTML=out.join("");
+}
+
+// ======================= 保存 =======================
+function download(name,blob){ const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},1500); }
+$("csv").onclick=()=>{
+  const RA=S.rowsAll||[]; if(RA.length<1){ toast("記録がありません"); return; }
+  const n=v=>v==null?"":v.toFixed(5);
+  let s="t(s),x(m),v(m/s),a(m/s^2),frame,used\n"; RA.forEach(r=>{ s+=`${n(r.t)},${n(r.x)},${r.off?"":n(r.v)},${r.off?"":n(r.a)},${r.f+1},${r.off?0:1}\n`; });
+  download("motion_data.csv",new Blob(["﻿"+s],{type:"text/csv"}));
+};
+function savePng(k){
+  if(S.rows.length<3){ toast("グラフがまだありません"); return; }
+  const r=graphSVG(k,960,540,true), img=new Image(), url=URL.createObjectURL(new Blob([r.svg],{type:"image/svg+xml;charset=utf-8"}));
+  img.onload=()=>{ const c=document.createElement("canvas"); c.width=1920; c.height=1080; const g=c.getContext("2d"); g.scale(2,2); g.drawImage(img,0,0); URL.revokeObjectURL(url);
+    c.toBlob(b=>download(`graph_${k}.png`,b),"image/png"); };
+  img.src=url;
+}
+
+// ======================= 初期化 =======================
+fillFps(); fillEvery(); buildGraphs(); setStep(0); renderAll();
+</script>
+</body>
+</html>
