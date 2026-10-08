@@ -10,7 +10,7 @@
 :root{
   --bg:#eef1f5; --panel:#ffffff; --ink:#1c2430; --ink2:#5d6878; --line:#d5dbe3; --soft:#f4f6f9;
   --accent:#2563eb; --accentSoft:#e3ecff; --x:#2563eb; --v:#15803d; --a:#dc2626; --ax:#7c3aed; --warn:#b45309; --ok:#15803d;
-  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Yu Gothic","Noto Sans JP",Meiryo,sans-serif;
+  font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN",-apple-system,BlinkMacSystemFont,"Yu Gothic UI","Yu Gothic","Noto Sans JP",Meiryo,sans-serif;
 }
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--ink)}
@@ -85,6 +85,8 @@ input[type=number]{width:92px;text-align:right}
 .toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#111827;color:#fff;padding:8px 16px;border-radius:999px;font-size:14px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:60;max-width:90vw;text-align:center}
 .toast.on{opacity:.94}
 .kbd{font-size:12px;color:var(--ink2)}
+body.native .webonly{display:none!important}
+body.native header{display:none}
 .mobileTip{display:none}
 @media (max-width:600px){
   .framebar input[type=range]{min-width:70px;flex-basis:70px}
@@ -127,7 +129,7 @@ input[type=number]{width:92px;text-align:right}
         <p class="lead">物体の動きを、カメラを固定して真横から撮った動画を使います。</p>
         <input type="file" id="file" accept="video/*" hidden>
         <button class="btn primary" id="pick">動画を選ぶ</button>
-        <p class="note">PCでは動画をドラッグ＆ドロップでも読み込めます。</p>
+        <p class="note webonly">PCでは動画をドラッグ＆ドロップでも読み込めます。</p>
       </section>
 
       <!-- 2 長さの基準 -->
@@ -228,6 +230,10 @@ const S={
   fit:{x:"quad",v:"fromx",a:"fromx",ax:"fromx"}, rows:[], fitX:null, scaleK:1
 };
 const PRESET={uniform:{x:"quad",v:"fromx",a:"fromx",ax:"fromx"}, shm:{x:"sin",v:"fromx",a:"fromx",ax:"lin"}, free:{x:"quad",v:"lin",a:"const",ax:"lin"}};
+// アプリ版（iOS）から開かれたときは、コマ画像と正確な時刻をアプリから受け取る
+const NATIVE=!!(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.ma);
+const post=m=>{ try{ window.webkit.messageHandlers.ma.postMessage(m); }catch(e){} };
+if(NATIVE) document.documentElement.classList.add("native-root");
 let toastTimer=null;
 function toast(msg){const t=$("toast");t.textContent=msg;t.classList.add("on");clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove("on"),1800);}
 const fx=(v,d=3)=>{ if(v==null||!isFinite(v)) return "—"; const a=Math.abs(v); if(a<5e-4) return "0"; if(a>=1e5) return v.toExponential(2).replace("-","−"); return (+v.toFixed(d)).toString().replace("-","−"); };
@@ -246,7 +252,7 @@ $("steps").addEventListener("click",e=>{const b=e.target.closest("button"); if(!
 document.querySelectorAll("[data-go]").forEach(b=>b.addEventListener("click",()=>setStep(+b.dataset.go)));
 
 // ======================= 動画の読み込み =======================
-$("pick").onclick=()=>$("file").click();
+$("pick").onclick=()=>{ if(NATIVE) post({type:"close"}); else $("file").click(); };
 $("file").onchange=e=>{ if(e.target.files[0]) loadVideo(e.target.files[0]); e.target.value=""; };
 const drop=$("drop");
 ["dragover","drop"].forEach(t=>window.addEventListener(t,e=>e.preventDefault()));
@@ -266,7 +272,8 @@ function fillEvery(){
   for(let k=1;k<=10;k++){const o=document.createElement("option"); o.value=k; o.textContent=k===1?"毎コマ":`${k}コマごと`; sel.appendChild(o);}
   sel.value=cur; updateDt();
 }
-function updateDt(){ const dt=S.every/S.fps*S.slow; $("dtInfo").textContent=`→ 時間の間隔 Δt = ${dt.toFixed(3)} 秒`; }
+function avgDt(){ if(S.nat){ const T=S.nat.times; return T.length>1?(T[T.length-1]-T[0])/(T.length-1):1/30; } return 1/S.fps; }
+function updateDt(){ const dt=S.every*avgDt()*S.slow; $("dtInfo").textContent=`→ 時間の間隔 Δt ≒ ${dt.toFixed(3)} 秒`; }
 function frameCount(){ return Math.max(1,Math.round(video.duration*S.fps)); }
 function lockTiming(){ const lock=S.pts.size>0; ["fps","slow"].forEach(id=>$(id).disabled=lock);
   $("fpsNote").textContent = lock ? "記録した点があるため、フレームレートとスロー設定は変更できません（「全部消す」で解除）。" : ($("fpsNote").dataset.msg||""); }
@@ -326,6 +333,16 @@ function resetAll(){
 let seekChain=Promise.resolve();
 function seekFrame(f){
   f=Math.max(0,Math.min(S.nFrames-1,Math.round(f)));
+  if(S.nat){
+    seekChain=seekChain.then(()=>new Promise(res=>{
+      S.seeking=true; const img=new Image(); let done=false;
+      const fin=ok=>{ if(done) return; done=true; clearTimeout(tm); if(ok) S.img=img; S.frame=f; S.seeking=false; $("seek").value=f; draw(); updateTrackInfo(); res(); };
+      const tm=setTimeout(()=>fin(false),6000);
+      img.onload=()=>fin(true); img.onerror=()=>{ toast("コマを読み込めませんでした"); fin(false); };
+      img.src=window.MA_frameSrc?window.MA_frameSrc(f):`maapp://frame/${f}`;
+    }));
+    return seekChain;
+  }
   seekChain=seekChain.then(()=>new Promise(res=>{
     S.seeking=true;
     const target=(f+0.5)/S.fps; let done=false;
@@ -352,7 +369,7 @@ document.addEventListener("keydown",e=>{
   else if(e.key==="ArrowLeft"){e.preventDefault(); seekFrame(S.frame-(e.shiftKey?10:1));}
   else if(e.key==="Backspace"||(e.key==="z"&&(e.ctrlKey||e.metaKey))){e.preventDefault(); undo();}
 });
-function frameTimeReal(f){ return f/S.fps*S.slow; }
+function frameTimeReal(f){ return S.nat ? (S.nat.times[f]-S.nat.times[0])*S.slow : f/S.fps*S.slow; }
 function updateTrackInfo(){
   const t=frameTimeReal(S.frame);
   $("hud").textContent=`コマ ${S.frame+1} / ${S.nFrames}　t = ${t.toFixed(3)} s`;
@@ -363,7 +380,7 @@ function updateTrackInfo(){
 // ======================= 描画 =======================
 function draw(){
   if(!S.loaded) return;
-  try{ ctx.drawImage(video,0,0,cv.width,cv.height); }catch(e){}
+  try{ if(S.nat){ if(S.img) ctx.drawImage(S.img,0,0,cv.width,cv.height); } else ctx.drawImage(video,0,0,cv.width,cv.height); }catch(e){}
   const W=cv.width, r=Math.max(4,W*0.006), lw=Math.max(2,W*0.0022), fs=Math.max(13,Math.round(W*0.016));
   ctx.lineCap="round";
   // 長さの基準
@@ -507,7 +524,7 @@ function recompute(){
   // 速度・加速度の計算、t = 0 の基準、ほかのグラフからも除く
   const all=arr.map(p=>({f:p.f, x:((p.px-S.origin.x)*S.u.x+(p.py-S.origin.y)*S.u.y)*S.mpp, v:null, a:null, off:S.ign.x.has(p.f)}));
   const act=all.filter(r=>!r.off), f0=(act[0]||all[0]).f;
-  all.forEach(r=>r.t=(r.f-f0)/S.fps*S.slow);
+  all.forEach(r=>r.t=S.nat ? (S.nat.times[r.f]-S.nat.times[f0])*S.slow : (r.f-f0)/S.fps*S.slow);
   S.rowsAll=all; S.rows=act;
   derivs(S.rows,S.win);
   renderAll();
@@ -601,7 +618,7 @@ function graphSVG(k,W,H,forExport){
   let ylo=Math.min(0,...(ysAct.length?ysAct:s.map(p=>p.Y))), yhi=Math.max(0,...(ysAct.length?ysAct:s.map(p=>p.Y)));
   const yp=(yhi-ylo)*0.08||0.1; ylo-=yp; yhi+=yp;   const tx=niceTicks(xlo,xhi,6), ty=niceTicks(ylo,yhi,5);
   const X=v=>L+(v-tx.lo)/(tx.hi-tx.lo)*pw, Y=v=>top+(1-(v-ty.lo)/(ty.hi-ty.lo))*ph;
-  let o=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="-apple-system,'Hiragino Sans','Yu Gothic',sans-serif">`;
+  let o=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="'Hiragino Sans','Hiragino Kaku Gothic ProN',-apple-system,'Yu Gothic',sans-serif">`;
   o+=`<rect x="0" y="0" width="${W}" height="${H}" fill="#fff"/>`;
   if(forExport){ o+=`<text x="${L}" y="26" font-size="18" font-weight="700" fill="${g.hex}">${g.title}</text><text x="${L}" y="50" font-size="14" font-family="Menlo,Consolas,monospace" fill="#1c2430">${esc(eqText(k))}</text>`; }
   o+=`<defs><clipPath id="cp-${k}${forExport?"e":""}"><rect x="${L}" y="${top}" width="${pw}" height="${ph}"/></clipPath></defs>`;
@@ -661,12 +678,14 @@ function renderResults(){
     if(ax.length>=3){ const c=lsq(ax.map(p=>p.X),ax.map(p=>p.Y),[x=>x,()=>1]); if(c&&c[0]<0){ add("ω²（a-x の傾きから）",`${fx(-c[0])} s⁻²`,`T = ${fx(2*Math.PI/Math.sqrt(-c[0]))} s`); } }
   }
   const nAll=(S.rowsAll||S.rows).length;
-  add("計算に使った点",`${S.rows.length} 点`+(nAll>S.rows.length?` / 記録 ${nAll} 点`:""),`Δt = ${(S.every/S.fps*S.slow).toFixed(3)} s ごと（${fx(S.fps)} fps）`);
+  add("計算に使った点",`${S.rows.length} 点`+(nAll>S.rows.length?` / 記録 ${nAll} 点`:""),`Δt ≒ ${(S.every*avgDt()*S.slow).toFixed(3)} s ごと（${(1/avgDt()).toFixed(1)} fps）`);
   $("results").innerHTML=out.join("");
 }
 
 // ======================= 保存 =======================
-function download(name,blob){ const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},1500); }
+function download(name,blob){
+  if(NATIVE){ const r=new FileReader(); r.onload=()=>post({type:"share",name,data:String(r.result).split(",")[1]}); r.readAsDataURL(blob); return; }
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},1500); }
 $("csv").onclick=()=>{
   const RA=S.rowsAll||[]; if(RA.length<1){ toast("記録がありません"); return; }
   const n=v=>v==null?"":v.toFixed(5);
@@ -682,7 +701,21 @@ function savePng(k){
 }
 
 // ======================= 初期化 =======================
+window.MA_nativeLoad=async function(info){
+  resetAll();
+  S.nat={times:info.times}; S.fps=info.times.length>1?1/avgDt():30; S.nFrames=info.times.length;
+  cv.width=info.width; cv.height=info.height;
+  $("stage").classList.add("loaded"); S.loaded=true;
+  $("fps").closest(".row").style.display="none";
+  const fr=1/avgDt();
+  $("fpsNote").dataset.msg=`各コマの時刻を動画から直接読み取っています（${S.nFrames}コマ、平均 ${fr.toFixed(fr>=100?0:1)} fps）。`+(info.recorded?"":"「写真」のスローモーション動画は速さが途中で変わることがあるため、アプリ内で高速撮影した動画をおすすめします。");
+  $("fpsNote").textContent=$("fpsNote").dataset.msg;
+  $("seek").max=S.nFrames-1; $("seek").value=0; fillEvery();
+  await seekFrame(0); setStep(1);
+};
+if(NATIVE){ document.body.classList.add("native"); $("pick").textContent="別の動画を選ぶ"; }
 fillFps(); fillEvery(); buildGraphs(); setStep(0); renderAll();
+if(NATIVE) post({type:"ready"});
 </script>
 </body>
 </html>

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>サポート｜Motion Analyzer</title>
+<style>
+body{font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN",-apple-system,"Yu Gothic",Meiryo,sans-serif;line-height:1.8;color:#1c2430;background:#f6f7f9;margin:0}
+main{max-width:760px;margin:0 auto;padding:28px 18px 48px;background:#fff;min-height:100vh}
+h1{font-size:22px} h2{font-size:17px;margin-top:28px;border-left:4px solid #2563eb;padding-left:8px}
+p,li{font-size:15px}
+</style>
+</head>
+<body><main>
+<h1>Motion Analyzer 物理動画解析　サポート</h1>
+<p>物体の運動を撮影した動画から位置を記録し、x-t・v-t・a-t グラフを作る学習用アプリです。自由落下・鉛直投射・斜面の運動・単振動に対応しています。</p>
+<h2>使い方</h2>
+<ol>
+<li><b>動画</b>：アプリで撮影するか、「写真」やファイルから動画を選びます。</li>
+<li><b>長さの基準</b>：長さが分かっている物の両端をタップし、その長さ（m）を入力します。</li>
+<li><b>座標軸</b>：原点をタップし、正の向きを選びます。斜面は「2点で指定」で斜面に沿わせます。</li>
+<li><b>記録</b>：物体の中心をタップすると記録して次のコマへ進みます。</li>
+</ol>
+<h2>よくある質問</h2>
+<p><b>Q. 加速度の点がばらつきます。</b><br>「記録の間隔」を2〜3コマごとにする、「微分の点数」を増やす、のどちらかを試してください。加速度の値は x-t グラフの2次近似（2A）から求めるのが最も安定します。</p>
+<p><b>Q. 動き出す前のコマも記録してしまいました。</b><br>x-t グラフでその点をタップすると、計算から外れます。</p>
+<p><b>Q. 「写真」のスローモーション動画がうまく解析できません。</b><br>スローモーション動画は途中で速さが変わることがあります。アプリ内の 120fps・240fps 撮影を使ってください。</p>
+<h2>お問い合わせ</h2>
+<p>不具合のご報告やご要望は、GitHub の <a href="https://github.com/ssuetsugu0422-afk/motion-analyzer/issues">Issues</a> からお送りください。</p>
+<p><a href="privacy.html">プライバシーポリシー</a></p>
+</main></body>
+</html>
